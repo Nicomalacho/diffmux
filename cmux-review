@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# cmux-review — launch the diff reviewer for the current repo.
+# Runs from wherever you are; defaults --cwd to $PWD.
+#
+#   cmux-review                 # review working tree vs HEAD
+#   cmux-review -- main...HEAD  # review a branch range
+#   cmux-review --surface surface:34   # explicit target pane
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec node "$DIR/server.mjs" --cwd "$PWD" "$@"

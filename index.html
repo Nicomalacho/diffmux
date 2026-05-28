@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>cmux-review</title>
+<style>
+  :root {
+    --bg:#ffffff; --fg:#1f2328; --muted:#656d76; --border:#d0d7de;
+    --add-bg:#e6ffec; --add-num:#d2f8d9; --del-bg:#ffebe9; --del-num:#ffd7d5;
+    --code:#f6f8fa; --accent:#0969da; --accent-fg:#ffffff; --hover:#eaeef2;
+    --cmt:#fff8c5; --cmt-border:#d4a72c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0d1117; --fg:#e6edf3; --muted:#8b949e; --border:#30363d;
+      --add-bg:#12261e; --add-num:#1b4721; --del-bg:#25171c; --del-num:#5c1f24;
+      --code:#161b22; --accent:#2f81f7; --accent-fg:#ffffff; --hover:#161b22;
+      --cmt:#272215; --cmt-border:#9e6a03;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+         background:var(--bg); color:var(--fg); padding-bottom:120px; }
+  header { position:sticky; top:0; z-index:5; background:var(--bg);
+           border-bottom:1px solid var(--border); padding:10px 16px;
+           display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  header .title { font-weight:600; }
+  header .range { color:var(--muted); font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+                  background:var(--code); padding:2px 6px; border-radius:6px; }
+  .badge { background:var(--accent); color:var(--accent-fg); border-radius:20px;
+           padding:1px 8px; font-size:12px; font-weight:600; }
+  main { padding:16px; max-width:1100px; margin:0 auto; }
+  .file { border:1px solid var(--border); border-radius:8px; margin-bottom:16px; overflow:hidden; }
+  .file > .fname { background:var(--code); padding:8px 12px; font:12px ui-monospace,Menlo,monospace;
+                   border-bottom:1px solid var(--border); position:sticky; top:43px; z-index:1; }
+  table { width:100%; border-collapse:collapse; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  td { padding:0 8px; vertical-align:top; white-space:pre-wrap; word-break:break-word; }
+  td.num { width:1%; min-width:40px; text-align:right; color:var(--muted);
+           user-select:none; border-right:1px solid var(--border); }
+  td.gut { width:18px; padding:0; text-align:center; user-select:none; cursor:pointer; color:transparent; }
+  tr.line:hover td.gut { color:var(--accent); }
+  tr.line:hover { background:var(--hover); }
+  tr.add td.code, tr.add td.num { background:var(--add-bg); }
+  tr.add td.num { background:var(--add-num); }
+  tr.del td.code, tr.del td.num { background:var(--del-bg); }
+  tr.del td.num { background:var(--del-num); }
+  tr.hunk td { background:var(--code); color:var(--muted); }
+  tr.commented td.code { box-shadow:inset 3px 0 var(--cmt-border); }
+  .cmt-row td { padding:8px 10px 8px 60px; background:transparent; }
+  .cmt-box { border:1px solid var(--cmt-border); background:var(--cmt); border-radius:6px; padding:8px; }
+  .cmt-box textarea { width:100%; min-height:54px; resize:vertical; font:13px -apple-system,sans-serif;
+                      border:1px solid var(--border); border-radius:6px; padding:6px; background:var(--bg); color:var(--fg); }
+  .cmt-box .actions { margin-top:6px; display:flex; gap:8px; align-items:center; }
+  button { font:13px -apple-system,sans-serif; cursor:pointer; border:1px solid var(--border);
+           background:var(--bg); color:var(--fg); border-radius:6px; padding:4px 10px; }
+  button.primary { background:var(--accent); color:var(--accent-fg); border-color:transparent; font-weight:600; }
+  button.link { border:none; background:none; color:var(--accent); padding:2px; }
+  .saved { border:1px solid var(--cmt-border); background:var(--cmt); border-radius:6px; padding:6px 10px; }
+  .saved .meta { color:var(--muted); font-size:11px; margin-bottom:2px; }
+  footer { position:fixed; bottom:0; left:0; right:0; background:var(--bg);
+           border-top:1px solid var(--border); padding:10px 16px; z-index:6;
+           display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  footer input[type=text] { flex:0 0 320px; font:12px ui-monospace,Menlo,monospace;
+           border:1px solid var(--border); border-radius:6px; padding:5px 8px; background:var(--bg); color:var(--fg); }
+  footer .chips { display:flex; gap:6px; flex-wrap:wrap; max-width:100%; }
+  .chip { font:11px -apple-system,sans-serif; border:1px solid var(--border); border-radius:20px;
+          padding:2px 8px; cursor:pointer; background:var(--bg); color:var(--fg); }
+  .chip:hover { background:var(--hover); }
+  #summary { flex:1 1 240px; min-width:160px; font:13px -apple-system,sans-serif;
+             border:1px solid var(--border); border-radius:6px; padding:6px; background:var(--bg); color:var(--fg); }
+  .grow { flex:1; }
+  #status { color:var(--muted); font-size:12px; }
+  .empty { color:var(--muted); padding:40px; text-align:center; }
+  label.ck { display:flex; align-items:center; gap:4px; color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="title">cmux-review</span>
+  <span id="repo" class="range"></span>
+  <span id="range" class="range"></span>
+  <span class="grow"></span>
+  <span>comments <span id="count" class="badge">0</span></span>
+</header>
+
+<main id="main"><div class="empty">Loading diff…</div></main>
+
+<footer>
+  <div class="chips" id="surfaceChips"></div>
+  <input type="text" id="surface" placeholder="target surface (ref or uuid)" />
+  <input type="text" id="summary" placeholder="optional overall note to the agent" />
+  <label class="ck"><input type="checkbox" id="submit" checked /> auto-submit</label>
+  <button class="primary" id="send">Send to agent</button>
+  <span id="status"></span>
+</footer>
+
+<script>
+const state = { comments: new Map(), ctx: null };
+const $ = (id) => document.getElementById(id);
+
+function esc(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+// ---- unified diff parser ----
+function parseDiff(text){
+  const files = []; let f = null, h = null;
+  const lines = text.split('\n');
+  for (let i=0;i<lines.length;i++){
+    const ln = lines[i];
+    if (ln.startsWith('diff --git')){
+      const m = ln.match(/ a\/(.+) b\/(.+)$/);
+      f = { old:m?m[1]:'', new:m?m[2]:'', hunks:[] }; files.push(f); h=null; continue;
+    }
+    if (!f){ if (ln.startsWith('--- ')||ln.startsWith('+++ ')){ f={old:'',new:'',hunks:[]}; files.push(f);} else continue; }
+    if (ln.startsWith('--- ')){ const p=ln.slice(4); if(p!=='/dev/null') f.old=p.replace(/^a\//,''); continue; }
+    if (ln.startsWith('+++ ')){ const p=ln.slice(4); if(p!=='/dev/null') f.new=p.replace(/^b\//,''); continue; }
+    if (ln.startsWith('@@')){
+      const m = ln.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)/);
+      h = { text:ln, oldNo:m?+m[1]:0, newNo:m?+m[2]:0, lines:[] }; f.hunks.push(h); continue;
+    }
+    if (!h) continue;
+    if (ln.startsWith('\\')) continue; // "No newline at end of file"
+    const t = ln[0];
+    if (t==='+'){ h.lines.push({t:'+', oldNo:null, newNo:h.newNo++, text:ln.slice(1)}); }
+    else if (t==='-'){ h.lines.push({t:'-', oldNo:h.oldNo++, newNo:null, text:ln.slice(1)}); }
+    else { h.lines.push({t:' ', oldNo:h.oldNo++, newNo:h.newNo++, text:ln.slice(1)}); }
+  }
+  return files;
+}
+
+function render(files){
+  const main = $('main');
+  if (!files.length){ main.innerHTML = '<div class="empty">No changes in this diff range.</div>'; return; }
+  main.innerHTML = '';
+  files.forEach((f, fi) => {
+    const name = f.new || f.old || '(unknown)';
+    const div = document.createElement('div'); div.className='file';
+    const head = document.createElement('div'); head.className='fname'; head.textContent = name; div.appendChild(head);
+    const table = document.createElement('table'); const tb = document.createElement('tbody');
+    f.hunks.forEach(h => {
+      const hr = document.createElement('tr'); hr.className='hunk';
+      hr.innerHTML = `<td class="num"></td><td class="num"></td><td class="gut"></td><td class="code">${esc(h.text)}</td>`;
+      tb.appendChild(hr);
+      h.lines.forEach((l) => {
+        const key = `${name}::${l.newNo!=null?('n'+l.newNo):('o'+l.oldNo)}`;
+        const tr = document.createElement('tr');
+        tr.className = 'line ' + (l.t==='+'?'add':l.t==='-'?'del':'ctx');
+        tr.dataset.key = key;
+        tr.innerHTML =
+          `<td class="num">${l.oldNo??''}</td>`+
+          `<td class="num">${l.newNo??''}</td>`+
+          `<td class="gut" title="comment">+</td>`+
+          `<td class="code">${esc(l.t)}${esc(l.text)}</td>`;
+        tr.querySelector('.gut').onclick = () =>
+          openEditor(tr, { file:name, newNo:l.newNo, oldNo:l.oldNo, side:l.t, code:l.text, key });
+        tb.appendChild(tr);
+      });
+    });
+    table.appendChild(tb); div.appendChild(table); main.appendChild(div);
+  });
+}
+
+function openEditor(tr, meta){
+  if (tr.nextSibling && tr.nextSibling.classList && tr.nextSibling.classList.contains('cmt-row')) return;
+  const row = document.createElement('tr'); row.className='cmt-row';
+  const td = document.createElement('td'); td.colSpan=4;
+  const box = document.createElement('div'); box.className='cmt-box';
+  const ta = document.createElement('textarea'); ta.placeholder='Leave a comment for the agent…';
+  const existing = state.comments.get(meta.key); if (existing) ta.value = existing.body;
+  const actions = document.createElement('div'); actions.className='actions';
+  const save = document.createElement('button'); save.className='primary'; save.textContent='Save';
+  const cancel = document.createElement('button'); cancel.className='link'; cancel.textContent='Cancel';
+  actions.append(save, cancel);
+  box.append(ta, actions); td.appendChild(box); row.appendChild(td);
+  tr.after(row); ta.focus();
+  const close = () => row.remove();
+  cancel.onclick = close;
+  const doSave = () => {
+    const body = ta.value.trim();
+    if (body){ state.comments.set(meta.key, {...meta, body}); tr.classList.add('commented'); }
+    else { state.comments.delete(meta.key); tr.classList.remove('commented'); }
+    refreshSaved(tr, meta.key); close(); updateCount();
+  };
+  save.onclick = doSave;
+  ta.onkeydown = (e) => { if ((e.metaKey||e.ctrlKey) && e.key==='Enter') doSave(); if (e.key==='Escape') close(); };
+}
+
+function refreshSaved(tr, key){
+  // remove any prior saved display
+  if (tr.nextSibling && tr.nextSibling.classList && tr.nextSibling.classList.contains('saved-row')) tr.nextSibling.remove();
+  const c = state.comments.get(key); if (!c) return;
+  const row = document.createElement('tr'); row.className='saved-row';
+  const td = document.createElement('td'); td.colSpan=4; td.style.padding='8px 10px 8px 60px';
+  const d = document.createElement('div'); d.className='saved';
+  d.innerHTML = `<div class="meta">${esc(c.file)}:${c.newNo??c.oldNo??''}</div>`;
+  const body = document.createElement('div'); body.textContent = c.body; d.appendChild(body);
+  const act = document.createElement('div'); act.style.marginTop='4px';
+  const edit = document.createElement('button'); edit.className='link'; edit.textContent='Edit';
+  const del = document.createElement('button'); del.className='link'; del.textContent='Delete';
+  edit.onclick = () => { row.remove(); openEditor(tr, c); };
+  del.onclick = () => { state.comments.delete(key); tr.classList.remove('commented'); row.remove(); updateCount(); };
+  act.append(edit, del); d.appendChild(act); td.appendChild(d); row.appendChild(td); tr.after(row);
+}
+
+function updateCount(){ $('count').textContent = state.comments.size; }
+
+async function send(){
+  const comments = [...state.comments.values()];
+  if (!comments.length){ setStatus('No comments to send.'); return; }
+  const surface = $('surface').value.trim();
+  if (!surface){ setStatus('Pick a target surface first.'); return; }
+  setStatus('Sending…');
+  try {
+    const r = await fetch('/api/send', { method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ surface, comments, summary:$('summary').value, submit:$('submit').checked }) });
+    const j = await r.json();
+    if (j.ok){ setStatus(`Sent ${comments.length} comment(s) → ${surface}`); }
+    else setStatus('Error: ' + (j.error||'unknown'));
+  } catch(e){ setStatus('Error: ' + e.message); }
+}
+function setStatus(s){ $('status').textContent = s; }
+
+async function init(){
+  const ctx = await (await fetch('/api/context')).json();
+  state.ctx = ctx;
+  $('repo').textContent = ctx.repo;
+  $('range').textContent = ctx.range;
+  $('surface').value = ctx.defaultSurface || '';
+  const chips = $('surfaceChips');
+  (ctx.surfaces||[]).forEach(s => {
+    const c = document.createElement('span'); c.className='chip';
+    c.textContent = s.ref + (s.title ? ' · ' + s.title.slice(0,28) : '');
+    c.title = s.title || s.ref;
+    c.onclick = () => { $('surface').value = s.ref; setStatus('target → ' + s.ref); };
+    chips.appendChild(c);
+  });
+  const dj = await (await fetch('/api/diff')).json();
+  render(parseDiff(dj.diff || ''));
+  $('send').onclick = send;
+}
+init();
+</script>
+</body>
+</html>
