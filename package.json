@@ -1,0 +1,31 @@
+{
+  "name": "cmux-review",
+  "version": "1.0.0",
+  "description": "Inline diff review in a cmux pane, piped straight into the running agent session — no GitHub round-trip.",
+  "bin": {
+    "diffx-review": "./diffx-review.sh",
+    "cmux-review": "./cmux-review"
+  },
+  "files": [
+    "diffx-review.sh",
+    "bridge.mjs",
+    "inject.js",
+    "scrollfix.js",
+    "cmux-review",
+    "server.mjs",
+    "index.html",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "diffx-cli": "*"
+  },
+  "peerDependenciesMeta": {
+    "diffx-cli": {
+      "optional": true
+    }
+  },
+  "license": "MIT"
+}

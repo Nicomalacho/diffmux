@@ -1,73 +1,100 @@
 # cmux-review
 
-Review a git diff inside cmux's embedded browser, leave **inline comments**, and
-pipe them straight into a running agent's pane — no GitHub round-trip, no
-"please read my PR comments." The feedback lands in the agent as one message and
-(optionally) auto-submits.
+A fast, local code-review loop for cmux: review a diff in a polished GitHub-style
+UI, leave inline comments, and pipe them **straight into the agent running in your
+cmux pane** — no GitHub round-trip, no "please read my PR comments."
 
-It's ~2 files and uses only Node built-ins + the `cmux` CLI. Nothing to install.
+## Architecture: diffx UI + cmux bridge
 
-## How it works
+We use [**diffx**](https://github.com/wong2/diffx) for the review UI (Shiki syntax
+highlighting, file tree, split/unified, auto-collapse, viewed tracking) and add
+the one thing it lacks — delivery into a *running* cmux agent pane.
 
 ```
-diff UI (browser pane)  ──POST /api/send──▶  server.mjs  ──▶  cmux set-buffer
-  click line, comment                          builds prompt    cmux paste-buffer --surface <agent>
-  "Send to agent"                                               cmux send-key --surface <agent> enter
-                                                                        │
-                                                                        ▼
-                                                              agent receives the review
-                                                              as one message, addresses it
+diffx UI (cmux browser pane)
+  └─ injected "▶ Send to agent" button   (cmux browser addscript)
+       └─ bridge.mjs : GET diffx /api/comments  (only status != resolved)
+            └─ cmux set-buffer → paste-buffer → send-key enter  →  agent pane
+                 └─ PUT each comment status:"resolved"  (so nothing re-sends)
 ```
 
-The injection recipe is what makes it reliable: `cmux send` interprets embedded
-newlines as Enter (would submit early), but `paste-buffer` uses **bracketed
-paste**, so a multi-line prompt lands atomically and a single `send-key enter`
-submits it.
-
-## Usage
-
-From inside a cmux terminal, in (or pointed at) your repo:
+### Setup
 
 ```bash
-node /Users/nicolasgaviria/Documents/Projects/cmux-review/server.mjs --cwd "$PWD"
-# or, after `chmod +x cmux-review` and putting it on PATH:
-cmux-review                 # working tree vs HEAD
-cmux-review -- main...HEAD  # a branch range (anything after -- is git diff args)
-cmux-review --surface surface:34   # send to a specific pane
+npm install -g diffx-cli         # the review UI (required)
+npm install -g .                 # this repo → puts `diffx-review` on your PATH
 ```
 
-It opens the reviewer in a cmux browser pane automatically. Click the `+` in the
-gutter of any line to comment. Pick the **target surface** (the agent's pane) via
-the chips in the footer, or type a ref/uuid. Hit **Send to agent**.
+`npm install -g .` (run from this repo) installs a global `diffx-review` command
+(plus the legacy `cmux-review`). The launcher resolves its own path through the
+npm symlink, so it always finds `bridge.mjs` / `inject.js` regardless of where
+it's invoked from. To work on the scripts in place instead, `npm link` here.
 
-## Targeting the agent's pane
+### Use
 
-- Default target is `$CMUX_SURFACE_ID` — the surface that launched the tool. So if
-  the **agent itself** runs `cmux-review` (e.g. at the end of a task), feedback
-  routes back to that same session with zero config.
-- Otherwise the footer lists every terminal surface in the workspace; click one.
-- `cmux list-pane-surfaces --pane <p> --json` shows refs/titles if you want to
-  pick manually.
+From a cmux terminal, `cd` into the repo you want reviewed (the diff is taken
+from your current directory), then:
 
-## Flags
+```bash
+diffx-review                    # uncommitted changes
+diffx-review -- --staged        # staged
+diffx-review -- develop...HEAD  # PR-style: your branch vs its merge-base with the base branch
+```
 
-| flag | default | meaning |
-|---|---|---|
-| `--cwd <path>` | `$PWD` | repo to diff |
-| `--surface <ref|uuid>` | `$CMUX_SURFACE_ID` | default target pane |
-| `--port <n>` | `$CMUX_PORT` | server port (cmux reserves 9270–9279) |
-| `--no-open` | off | don't auto-open the browser pane |
-| `--no-focus` | off | open the pane without stealing focus |
-| `-- <args>` | `HEAD` | passed to `git diff` (e.g. `-- main...HEAD`, `-- --staged`) |
+`--` separates diffx's flags from the git-diff args (diffx's own syntax). Use your
+repo's *actual* base branch — if there's no `main`, `git diff main..HEAD` fails and
+diffx returns 500. Check with `git remote show origin` or `git symbolic-ref
+refs/remotes/origin/HEAD` (commonly `develop`, `master`, or `main`).
 
-## Notes / limits (MVP)
+It opens diffx in a cmux browser pane, starts the bridge, and injects a floating
+**▶ Send to agent** button. Click `+` on lines to comment, then hit the button —
+the comments become one prompt pasted into the pane that launched the tool
+(`$CMUX_SURFACE_ID`) and submitted. The agent picks them up and edits.
 
-- Untracked files aren't shown (they're not in `git diff`). Use `git add -N` to
-  include them, or extend the diff command.
-- "auto-submit" sends Enter. Turn it off to stage the prompt in the agent's input
-  and submit yourself — safer if the agent might be mid-task.
-- Socket access is `cmuxOnly` by default; this works because the server is a
-  cmux-spawned process. If you run it from a non-cmux shell, set a socket
-  password or change `automation.socketControlMode` in `~/.config/cmux/cmux.json`.
-- Round-trip: comments clear on the agent side once sent; re-diff and review again
-  for the next round.
+### Why this design
+
+- **UI is commodity** — diffx already nails highlighting, file tree, collapse,
+  split view. No point reimplementing GitHub's review surface.
+- **The cmux-native part is the value** — comments land in your *live* agent
+  session, not the clipboard or a separate fetch-skill.
+- **Double-send is structurally impossible** — the button disables while a push
+  is in flight, the bridge holds a busy-lock, and every sent comment is marked
+  `resolved` in diffx so a second click finds nothing new. Verified:
+  `push#1 → sent 2`, `push#2 → sent 0`.
+
+### Pieces
+
+| file | role |
+|---|---|
+| `diffx-review.sh` | one-command launcher (diffx + pane + bridge + button) |
+| `bridge.mjs` | pulls diffx `/api/comments`, injects into the cmux pane, resolves them |
+| `inject.js` | the floating "Send to agent" button added to the diffx page |
+| `scrollfix.js` | reverts diffx's native scroll-jump in the cmux webview (#24); injected unless `CMUX_REVIEW_SCROLLFIX=0` |
+
+diffx comment shape (its API): `{ id, filePath, side, lineNumber, lineContent, body, status, replies }`.
+The bridge renders `filePath:lineNumber` + the code line + your comment (and any replies).
+
+### Knobs
+
+- `DIFFX_PORT` (default 3433), `BRIDGE_PORT` (default 3434)
+- `CMUX_REVIEW_SCROLLFIX=0` — disable the injected scroll-jump fix (`scrollfix.js`,
+  for [wong2/diffx#24](diffx-scroll-jump-issue.md); on by default)
+- `bridge.mjs --surface <ref|uuid>` — override the target pane (default `$CMUX_SURFACE_ID`)
+- `bridge.mjs --no-submit` — paste the prompt but don't press Enter (submit yourself)
+
+### cmux facts this relies on
+
+- `cmux send` treats `\n` as Enter (submits early) — multi-line must go through
+  `paste-buffer` (bracketed paste) + a single `send-key enter`.
+- Socket auth is `cmuxOnly`, so the bridge must run inside the cmux process tree
+  (launch it from a cmux terminal; don't `nohup`-detach it).
+
+## Legacy: zero-dependency built-in viewer
+
+`server.mjs` + `index.html` are a self-contained hand-rolled reviewer (no diffx,
+no npm) — kept as a fallback. Works, but no syntax highlighting / file tree /
+collapse. Prefer the diffx path above.
+
+```bash
+cmux-review            # installed by `npm install -g .`; or: node server.mjs --cwd "$PWD"
+```
