@@ -16,7 +16,8 @@ const btnCss = (bg) => `margin:6px 6px 0 0;padding:4px 10px;border:none;border-r
 let style = "split";
 let cid = 0;
 const comments = []; // {id, path, side:'additions'|'deletions', line, body}
-const diffs = [];    // {path, instance, section}
+const diffs = [];    // {path, instance, section, body, chev, vchk, setCollapsed}
+const viewed = new Set(); // paths marked "viewed"
 let composer = null;
 
 function pathOf(meta) {
@@ -83,6 +84,23 @@ function activate(path) {
   document.querySelectorAll(".fitem").forEach((el) => el.classList.toggle("active", el.dataset.path === path));
 }
 
+function updateViewedMeta() {
+  const total = diffs.length, n = viewed.size;
+  $("#meta").textContent = `${total} file${total === 1 ? "" : "s"} changed${n ? ` · ${n} viewed` : ""}`;
+}
+
+function setViewed(path, on) {
+  const d = diffs.find((x) => x.path === path);
+  if (!d) return;
+  if (on) viewed.add(path); else viewed.delete(path);
+  d.vchk.checked = on;
+  d.setCollapsed(on);
+  d.section.classList.toggle("viewed", on);
+  const item = document.querySelector(`.fitem[data-path="${CSS.escape(path)}"]`);
+  if (item) item.classList.toggle("viewed", on);
+  updateViewedMeta();
+}
+
 function buildSidebar(files, stats) {
   const side = $("#sidebar");
   side.innerHTML = '<div class="title">Files changed</div>';
@@ -95,7 +113,12 @@ function buildSidebar(files, stats) {
     const add = document.createElement("span"); add.className = "add"; add.textContent = `+${st.add ?? 0}`;
     const del = document.createElement("span"); del.className = "del"; del.textContent = `−${st.del ?? 0}`;
     item.append(nm, add, del);
-    item.onclick = () => { document.getElementById(`file-${i}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); activate(path); };
+    item.onclick = () => {
+      const d = diffs.find((x) => x.path === path);
+      if (d) d.setCollapsed(false);   // expand so the jumped-to file is visible
+      document.getElementById(`file-${i}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      activate(path);
+    };
     side.appendChild(item);
   });
 }
@@ -116,13 +139,29 @@ async function load() {
   root.innerHTML = `<div id="hint">Click a line number (or hover a line and click the blue <b>+</b>) to comment, then <b>▶ Send to agent</b>.</div>`;
   files.forEach((meta, i) => {
     const path = pathOf(meta);
+    const st = stats[path] || {};
     const sec = document.createElement("section");
     sec.className = "file"; sec.id = `file-${i}`;
+
+    const hdr = document.createElement("div"); hdr.className = "fhdr";
+    const chev = document.createElement("span"); chev.className = "chev"; chev.textContent = "▾";
+    const name = document.createElement("span"); name.className = "fhname"; name.textContent = path;
+    const cnt = document.createElement("span"); cnt.className = "fhcnt";
+    cnt.innerHTML = `<span class="add">+${st.add ?? 0}</span> <span class="del">−${st.del ?? 0}</span>`;
+    const vlabel = document.createElement("label"); vlabel.className = "vlabel";
+    const vchk = document.createElement("input"); vchk.type = "checkbox";
+    vlabel.append(vchk, document.createTextNode("Viewed"));
+    hdr.append(chev, name, cnt, vlabel);
+
+    const body = document.createElement("div"); body.className = "fbody";
+    sec.append(hdr, body);
     root.appendChild(sec);
+
     const inst = new FileDiff({
       theme: { dark: "pierre-dark", light: "pierre-light" },
       themeType: "dark",
       diffStyle: style,
+      disableFileHeader: true,   // we render our own header (collapse + Viewed)
       enableLineSelection: true,
       enableGutterUtility: true,
       lineHoverHighlight: "both",
@@ -139,10 +178,16 @@ async function load() {
       },
       onLineNumberClick: (p) => openComposer(path, p.lineNumber, p.annotationSide, p.numberElement && p.numberElement.getBoundingClientRect()),
     });
-    diffs.push({ path, instance: inst, section: sec });
-    inst.render({ fileDiff: meta, containerWrapper: sec });
+
+    const setCollapsed = (c) => { body.style.display = c ? "none" : ""; chev.textContent = c ? "▸" : "▾"; sec.classList.toggle("collapsed", c); };
+    diffs.push({ path, instance: inst, section: sec, body, chev, vchk, setCollapsed });
+    inst.render({ fileDiff: meta, containerWrapper: body });
+
+    hdr.addEventListener("click", (e) => { if (e.target.closest("label")) return; setCollapsed(body.style.display !== "none"); });
+    vchk.addEventListener("change", (e) => { e.stopPropagation(); setViewed(path, vchk.checked); });
   });
   renderPanel();
+  updateViewedMeta();
 
   const obs = new IntersectionObserver((es) => {
     const vis = es.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
