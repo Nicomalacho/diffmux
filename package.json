@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "description": "Inline diff review in a cmux pane, piped straight into the running agent session — no GitHub round-trip.",
   "bin": {
+    "diffx-review": "./pierre-review.sh",
     "pierre-review": "./pierre-review.sh",
+    "diffx-classic": "./diffx-review.sh",
     "hunk-review": "./hunk-review.sh",
-    "diffx-review": "./diffx-review.sh",
     "cmux-review": "./cmux-review"
   },
   "files": [

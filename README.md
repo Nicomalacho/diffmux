@@ -6,27 +6,32 @@ cmux pane** — no GitHub round-trip, no "please read my PR comments."
 
 ## Frontends
 
-Three review UIs, all piping inline comments into the cmux agent pane that
-launched them (no GitHub round-trip). Pick with the matching command:
+Review UIs, all piping inline comments into the cmux agent pane that launched
+them (no GitHub round-trip). Pick with the matching command:
 
-| command | UI | engine | notes |
-|---|---|---|---|
-| **`pierre-review`** ⭐ | browser pane | [`@pierre/diffs`](https://diffs.com) (Shiki + Shadow DOM) | **recommended** — fast, file sidebar, click-to-comment composer |
-| `hunk-review` | terminal pane | [`hunk`](https://github.com/modem-dev/hunk) TUI | native terminal, no webview; polls `hunk session comment list --type user` |
-| `diffx-review` | browser pane | [`diffx`](https://github.com/wong2/diffx) | original; has a scroll-jump patched by `scrollfix.js` |
+| command | UI | notes |
+|---|---|---|
+| **`diffx-review`** ⭐ | browser — [`@pierre/diffs`](https://diffs.com) | **default** — fast: file sidebar, split/unified, collapse, mark-as-read, click-to-comment. `pierre-review` is an alias. |
+| `hunk-review` | terminal — [`hunk`](https://github.com/modem-dev/hunk) TUI | native, no webview; polls `hunk session comment list --type user` |
+| `diffx-classic` | browser — [`diffx`](https://github.com/wong2/diffx) | the original diffx engine; scroll-jumps, mitigated by `scrollfix.js` |
 
-### `pierre-review` (recommended)
+> Heads-up: `diffx-review` launches the `@pierre/diffs` UI (the default). The old
+> diffx engine is now `diffx-classic`; the diffx-specific sections further below
+> describe it.
+
+### `diffx-review` (default — the @pierre/diffs UI)
 
 ```bash
-npm install -g .                 # installs pierre-review, hunk-review, diffx-review
+npm install -g .                  # installs diffx-review, pierre-review, hunk-review, diffx-classic
 cd /path/to/repo
-pierre-review                    # working-tree changes
-pierre-review -- --staged        # staged
-pierre-review -- develop...HEAD  # PR-style: branch vs base (use your repo's real base)
+diffx-review                      # working-tree changes
+diffx-review -- --staged          # staged
+diffx-review -- develop...HEAD    # PR-style: branch vs base (use your repo's real base)
 ```
 
-Opens a cmux browser pane: file sidebar (with `+/-` counts), split/unified diff.
-Click a line number — or hover a line for the gutter **+** — to open a comment
+Opens a cmux browser pane: file sidebar (with `+/-` counts), split/unified diff,
+per-file collapse + **Viewed** (mark-as-read). Click a line number — or hover a
+line for the gutter **+** — to open a comment
 composer; comments collect in a panel (delete / jump-to-line); hit **▶ Send to
 agent** and they paste into the launching pane as one prompt with precise
 `file:line` refs. The agent must be **idle** to receive them — a paste during an
@@ -37,7 +42,8 @@ Pieces: `pierre-review.sh` (launcher, picks a free port + builds on first run),
 `pierre-server.mjs` (serves the UI, computes `git diff` + `--numstat`, pastes
 comments into the agent pane), `pierre/src/main.js` (the `@pierre/diffs`
 frontend), `pierre/index.html`. `hunk-review.sh` + `hunk-bridge.mjs` are the
-terminal-native sibling.
+terminal-native sibling; `diffx-review.sh` + `bridge.mjs` + `inject.js` +
+`scrollfix.js` are the `diffx-classic` engine.
 
 ## Architecture: diffx UI + cmux bridge
 
