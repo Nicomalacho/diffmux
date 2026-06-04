@@ -1,0 +1,16 @@
+{
+  "name": "pierre-review-ui",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Browser diff-review UI built on @pierre/diffs, bundled with esbuild.",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=esm --splitting --outdir=dist --external:react --external:react-dom"
+  },
+  "dependencies": {
+    "@pierre/diffs": "^1.2.7"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}

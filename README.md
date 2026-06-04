@@ -4,6 +4,41 @@ A fast, local code-review loop for cmux: review a diff in a polished GitHub-styl
 UI, leave inline comments, and pipe them **straight into the agent running in your
 cmux pane** — no GitHub round-trip, no "please read my PR comments."
 
+## Frontends
+
+Three review UIs, all piping inline comments into the cmux agent pane that
+launched them (no GitHub round-trip). Pick with the matching command:
+
+| command | UI | engine | notes |
+|---|---|---|---|
+| **`pierre-review`** ⭐ | browser pane | [`@pierre/diffs`](https://diffs.com) (Shiki + Shadow DOM) | **recommended** — fast, file sidebar, click-to-comment composer |
+| `hunk-review` | terminal pane | [`hunk`](https://github.com/modem-dev/hunk) TUI | native terminal, no webview; polls `hunk session comment list --type user` |
+| `diffx-review` | browser pane | [`diffx`](https://github.com/wong2/diffx) | original; has a scroll-jump patched by `scrollfix.js` |
+
+### `pierre-review` (recommended)
+
+```bash
+npm install -g .                 # installs pierre-review, hunk-review, diffx-review
+cd /path/to/repo
+pierre-review                    # working-tree changes
+pierre-review -- --staged        # staged
+pierre-review -- develop...HEAD  # PR-style: branch vs base (use your repo's real base)
+```
+
+Opens a cmux browser pane: file sidebar (with `+/-` counts), split/unified diff.
+Click a line number — or hover a line for the gutter **+** — to open a comment
+composer; comments collect in a panel (delete / jump-to-line); hit **▶ Send to
+agent** and they paste into the launching pane as one prompt with precise
+`file:line` refs. The agent must be **idle** to receive them — a paste during an
+active turn is dropped. First run builds the `@pierre/diffs` bundle under
+`pierre/` (esbuild + Shiki, ~1s); later runs are instant.
+
+Pieces: `pierre-review.sh` (launcher, picks a free port + builds on first run),
+`pierre-server.mjs` (serves the UI, computes `git diff` + `--numstat`, pastes
+comments into the agent pane), `pierre/src/main.js` (the `@pierre/diffs`
+frontend), `pierre/index.html`. `hunk-review.sh` + `hunk-bridge.mjs` are the
+terminal-native sibling.
+
 ## Architecture: diffx UI + cmux bridge
 
 We use [**diffx**](https://github.com/wong2/diffx) for the review UI (Shiki syntax
