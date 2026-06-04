@@ -12,6 +12,7 @@ them (no GitHub round-trip). Pick with the matching command:
 | command | UI | notes |
 |---|---|---|
 | **`diffx-review`** ⭐ | browser — [`@pierre/diffs`](https://diffs.com) | **default** — fast: file sidebar, split/unified, collapse, mark-as-read, click-to-comment. `pierre-review` is an alias. |
+| `workspace-review` | browser — [`@pierre/diffs`](https://diffs.com) | **multi-repo** — every changed repo in a `~/features/<feature>/` workspace, grouped by repo |
 | `hunk-review` | terminal — [`hunk`](https://github.com/modem-dev/hunk) TUI | native, no webview; polls `hunk session comment list --type user` |
 | `diffx-classic` | browser — [`diffx`](https://github.com/wong2/diffx) | the original diffx engine; scroll-jumps, mitigated by `scrollfix.js` |
 
@@ -44,6 +45,24 @@ comments into the agent pane), `pierre/src/main.js` (the `@pierre/diffs`
 frontend), `pierre/index.html`. `hunk-review.sh` + `hunk-bridge.mjs` are the
 terminal-native sibling; `diffx-review.sh` + `bridge.mjs` + `inject.js` +
 `scrollfix.js` are the `diffx-classic` engine.
+
+### Reviewing a whole feature workspace (`workspace-review`)
+
+For a multi-repo feature workspace (`~/features/<feature>/` with several repo
+worktrees), `workspace-review` aggregates **every changed repo into one review**,
+grouped by repo in the sidebar:
+
+```bash
+cd ~/features/<feature>/snappr.server   # any repo in the workspace
+workspace-review                         # or: workspace-review ~/features/<feature>
+```
+
+Each repo is diffed against its own base branch (from its `.feature-cli.json`,
+default `develop`) as `origin/<base>...HEAD`; files are namespaced `<repo>/<file>`
+(via `git diff --src-prefix/--dst-prefix`) so they don't collide, and comments
+come back as `<repo>/<file>:line` with the workspace path noted. Same collapse /
+Viewed / click-to-comment as the single-repo UI. Served by `pierre-server.mjs
+--workspace`; launched by `workspace-review.sh`.
 
 ## Architecture: diffx UI + cmux bridge
 

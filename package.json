@@ -5,12 +5,14 @@
   "bin": {
     "diffx-review": "./pierre-review.sh",
     "pierre-review": "./pierre-review.sh",
+    "workspace-review": "./workspace-review.sh",
     "diffx-classic": "./diffx-review.sh",
     "hunk-review": "./hunk-review.sh",
     "cmux-review": "./cmux-review"
   },
   "files": [
     "pierre-review.sh",
+    "workspace-review.sh",
     "pierre-server.mjs",
     "pierre/package.json",
     "pierre/index.html",

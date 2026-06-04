@@ -101,15 +101,25 @@ function setViewed(path, on) {
   updateViewedMeta();
 }
 
-function buildSidebar(files, stats) {
+function buildSidebar(files, stats, workspace) {
   const side = $("#sidebar");
-  side.innerHTML = '<div class="title">Files changed</div>';
+  side.innerHTML = `<div class="title">${workspace ? `Workspace · ${workspace}` : "Files changed"}</div>`;
+  let curRepo = null;
   files.forEach((meta, i) => {
     const path = pathOf(meta);
+    if (workspace) {
+      const repo = path.split("/")[0];
+      if (repo !== curRepo) {
+        curRepo = repo;
+        const g = document.createElement("div"); g.className = "frepo"; g.textContent = repo;
+        side.appendChild(g);
+      }
+    }
     const st = stats[path] || {};
     const item = document.createElement("div");
     item.className = "fitem"; item.dataset.path = path;
-    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = path; nm.dir = "rtl";
+    const display = workspace ? path.slice(path.indexOf("/") + 1) : path;
+    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = display; nm.dir = "rtl";
     const add = document.createElement("span"); add.className = "add"; add.textContent = `+${st.add ?? 0}`;
     const del = document.createElement("span"); del.className = "del"; del.textContent = `−${st.del ?? 0}`;
     item.append(nm, add, del);
@@ -127,13 +137,13 @@ async function load() {
   let data;
   try { data = await (await fetch("/api/diff")).json(); }
   catch (e) { $("#files").innerHTML = `<div class="pad">failed to load diff: ${e.message}</div>`; return; }
-  const patch = data.patch, stats = data.stats || {};
+  const patch = data.patch, stats = data.stats || {}, workspace = data.workspace || null;
   if (!patch || !patch.trim()) { $("#files").innerHTML = `<div class="pad">no changes to review.</div>`; return; }
 
   const parsed = processPatch(patch);
   const files = parsed.files || parsed || [];
   $("#meta").textContent = `${files.length} file${files.length === 1 ? "" : "s"} changed`;
-  buildSidebar(files, stats);
+  buildSidebar(files, stats, workspace);
 
   const root = $("#files");
   root.innerHTML = `<div id="hint">Click a line number (or hover a line and click the blue <b>+</b>) to comment, then <b>▶ Send to agent</b>.</div>`;

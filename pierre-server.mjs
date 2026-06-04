@@ -19,6 +19,7 @@ const opt = (n, d) => { const i = argv.indexOf(n); return i >= 0 && argv[i + 1] 
 const dd = argv.indexOf('--');
 const DIFF_ARGS = dd >= 0 ? argv.slice(dd + 1) : [];
 const CWD = opt('--cwd', process.cwd());
+const WORKSPACE = opt('--workspace', '');   // a feature dir holding multiple repo worktrees
 const PORT = parseInt(opt('--port', '3500'), 10);
 const SURFACE = opt('--surface', process.env.CMUX_SURFACE_ID || '');
 const SUBMIT = !argv.includes('--no-submit');
@@ -36,19 +37,71 @@ async function gitDiff() {
 // Per-file add/del counts (the patch metadata's *Lines fields are content, not counts).
 async function gitStats() {
   const { stdout } = await execFileP('git', ['-C', CWD, 'diff', '--numstat', ...DIFF_ARGS], { maxBuffer: 16 * 1024 * 1024 });
+  return parseNumstat(stdout);
+}
+
+function parseNumstat(stdout, prefix = '') {
   const stats = {};
   for (const line of stdout.split('\n')) {
     const m = line.match(/^(\d+|-)\t(\d+|-)\t(.+)$/);
-    if (m) stats[m[3]] = { add: m[1] === '-' ? 0 : +m[1], del: m[2] === '-' ? 0 : +m[2] };
+    if (m) stats[prefix + m[3]] = { add: m[1] === '-' ? 0 : +m[1], del: m[2] === '-' ? 0 : +m[2] };
   }
   return stats;
 }
 
+// ---- workspace mode: aggregate every changed repo under a feature dir ----
+// Each repo's files are namespaced `<repo>/<path>` (via git's --src/--dst-prefix)
+// so they don't collide and the UI can group by repo. Base branch per repo comes
+// from its .feature-cli.json (default "develop").
+function discoverRepos(featureDir) {
+  const out = [];
+  let names;
+  try { names = fs.readdirSync(featureDir).sort(); } catch { return out; }
+  for (const name of names) {
+    const dir = path.join(featureDir, name);
+    if (!fs.existsSync(path.join(dir, '.git'))) continue;   // worktree .git is a file — existsSync is fine
+    let base = 'develop';
+    try { base = JSON.parse(fs.readFileSync(path.join(dir, '.feature-cli.json'), 'utf8')).base_branch || base; } catch { /* default */ }
+    out.push({ repo: name, dir, base });
+  }
+  return out;
+}
+
+async function repoDiff(r) {
+  const range = `origin/${r.base}...HEAD`;
+  let patch = '';
+  try {
+    const { stdout } = await execFileP('git',
+      ['-C', r.dir, 'diff', `--src-prefix=a/${r.repo}/`, `--dst-prefix=b/${r.repo}/`, range],
+      { maxBuffer: 64 * 1024 * 1024 });
+    patch = stdout;
+  } catch { return null; }   // base ref missing, etc.
+  if (!patch.trim()) return null;
+  let stats = {};
+  try {
+    const { stdout } = await execFileP('git', ['-C', r.dir, 'diff', '--numstat', range], { maxBuffer: 16 * 1024 * 1024 });
+    stats = parseNumstat(stdout, `${r.repo}/`);
+  } catch { /* counts optional */ }
+  return { patch, stats };
+}
+
+async function workspaceDiff() {
+  const repos = discoverRepos(WORKSPACE);
+  const results = await Promise.all(repos.map(repoDiff));
+  let patch = '';
+  const stats = {};
+  for (const d of results) { if (!d) continue; patch += d.patch; Object.assign(stats, d.stats); }
+  return { patch, stats };
+}
+
 function buildPrompt(cs) {
   const n = cs.length;
+  const where = WORKSPACE
+    ? `from my @pierre/diffs workspace review. Paths are \`<repo>/<file>\`; the repos live under ${WORKSPACE}/<repo>.`
+    : `from my @pierre/diffs review.`;
   const L = [
     `Code review feedback — please address the following ${n} comment${n === 1 ? '' : 's'} ` +
-    `from my @pierre/diffs review. Make the edits directly; ask only if something is ambiguous.`,
+    `${where} Make the edits directly; ask only if something is ambiguous.`,
     '',
   ];
   cs.forEach((c, i) => {
@@ -90,9 +143,11 @@ http.createServer(async (req, res) => {
       return serveFile(res, fp);
     }
     if (u.pathname === '/api/diff') {
-      const [patch, stats] = await Promise.all([gitDiff(), gitStats()]);
+      let patch, stats;
+      if (WORKSPACE) ({ patch, stats } = await workspaceDiff());
+      else [patch, stats] = await Promise.all([gitDiff(), gitStats()]);
       res.writeHead(200, { 'content-type': 'application/json', ...cors });
-      return res.end(JSON.stringify({ patch, stats }));
+      return res.end(JSON.stringify({ patch, stats, workspace: WORKSPACE ? path.basename(WORKSPACE) : null }));
     }
     if (u.pathname === '/api/send' && req.method === 'POST') {
       let body = ''; for await (const ch of req) body += ch;
@@ -108,5 +163,5 @@ http.createServer(async (req, res) => {
     res.end(JSON.stringify({ error: String(e && e.message || e) }));
   }
 }).listen(PORT, '127.0.0.1', () => {
-  console.log(`pierre-server :${PORT}  cwd=${CWD}  surface=${SURFACE || '(none)'}  diffArgs=[${DIFF_ARGS.join(' ')}]`);
+  console.log(`pierre-server :${PORT}  ${WORKSPACE ? `workspace=${WORKSPACE}` : `cwd=${CWD}  diffArgs=[${DIFF_ARGS.join(' ')}]`}  surface=${SURFACE || '(none)'}`);
 });
