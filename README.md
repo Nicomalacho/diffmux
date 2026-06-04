@@ -31,8 +31,9 @@ diffx-review -- develop...HEAD    # PR-style: branch vs base (use your repo's re
 ```
 
 Opens a cmux browser pane: file sidebar (with `+/-` counts), split/unified diff,
-per-file collapse + **Viewed** (mark-as-read). Click a line number — or hover a
-line for the gutter **+** — to open a comment
+per-file collapse, **Viewed** (mark-as-read), and **⤢ Whole file** (re-fetches
+the file with full context so you see the entire file, not just the hunks).
+Click a line number — or hover a line for the gutter **+** — to open a comment
 composer; comments collect in a panel (delete / jump-to-line); hit **▶ Send to
 agent** and they paste into the launching pane as one prompt with precise
 `file:line` refs. The agent must be **idle** to receive them — a paste during an

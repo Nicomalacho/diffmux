@@ -133,6 +133,33 @@ function buildSidebar(files, stats, workspace) {
   });
 }
 
+// Toggle a single file between its diff hunks and the whole file (full context,
+// fetched on demand from /api/file with -U100000, cached after the first fetch).
+async function toggleExpand(entry, btn) {
+  entry.expanded = !entry.expanded;
+  entry.setCollapsed(false);
+  if (entry.expanded) {
+    if (!entry.fullMeta) {
+      btn.textContent = "loading…";
+      try {
+        const { patch } = await (await fetch(`/api/file?path=${encodeURIComponent(entry.path)}`)).json();
+        entry.fullMeta = (processPatch(patch).files || [])[0] || null;
+      } catch { entry.fullMeta = null; }
+    }
+    if (entry.fullMeta) {
+      btn.textContent = "Collapse"; btn.classList.add("on");
+      entry.instance.setOptions({ ...entry.instance.options, expandUnchanged: true });
+      entry.body.innerHTML = "";
+      entry.instance.render({ fileDiff: entry.fullMeta, containerWrapper: entry.body });
+    } else { entry.expanded = false; btn.textContent = "⤢ Whole file"; }
+  } else {
+    btn.textContent = "⤢ Whole file"; btn.classList.remove("on");
+    entry.instance.setOptions({ ...entry.instance.options, expandUnchanged: false });
+    entry.body.innerHTML = "";
+    entry.instance.render({ fileDiff: entry.meta, containerWrapper: entry.body });
+  }
+}
+
 async function load() {
   let data;
   try { data = await (await fetch("/api/diff")).json(); }
@@ -158,10 +185,11 @@ async function load() {
     const name = document.createElement("span"); name.className = "fhname"; name.textContent = path;
     const cnt = document.createElement("span"); cnt.className = "fhcnt";
     cnt.innerHTML = `<span class="add">+${st.add ?? 0}</span> <span class="del">−${st.del ?? 0}</span>`;
+    const exp = document.createElement("button"); exp.className = "expand"; exp.textContent = "⤢ Whole file"; exp.title = "Show the entire file";
     const vlabel = document.createElement("label"); vlabel.className = "vlabel";
     const vchk = document.createElement("input"); vchk.type = "checkbox";
     vlabel.append(vchk, document.createTextNode("Viewed"));
-    hdr.append(chev, name, cnt, vlabel);
+    hdr.append(chev, name, cnt, exp, vlabel);
 
     const body = document.createElement("div"); body.className = "fbody";
     sec.append(hdr, body);
@@ -190,11 +218,13 @@ async function load() {
     });
 
     const setCollapsed = (c) => { body.style.display = c ? "none" : ""; chev.textContent = c ? "▸" : "▾"; sec.classList.toggle("collapsed", c); };
-    diffs.push({ path, instance: inst, section: sec, body, chev, vchk, setCollapsed });
+    const entry = { path, instance: inst, section: sec, body, chev, vchk, setCollapsed, meta, expanded: false, fullMeta: null };
+    diffs.push(entry);
     inst.render({ fileDiff: meta, containerWrapper: body });
 
-    hdr.addEventListener("click", (e) => { if (e.target.closest("label")) return; setCollapsed(body.style.display !== "none"); });
+    hdr.addEventListener("click", (e) => { if (e.target.closest("label") || e.target.closest("button")) return; setCollapsed(body.style.display !== "none"); });
     vchk.addEventListener("change", (e) => { e.stopPropagation(); setViewed(path, vchk.checked); });
+    exp.addEventListener("click", (e) => { e.stopPropagation(); toggleExpand(entry, exp); });
   });
   renderPanel();
   updateViewedMeta();

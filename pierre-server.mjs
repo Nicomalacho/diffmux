@@ -94,6 +94,26 @@ async function workspaceDiff() {
   return { patch, stats };
 }
 
+// Full-context diff for ONE file (for the "see whole file" / unfold action).
+// `reqPath` is the displayed path: `<repo>/<rel>` in workspace mode, else `<rel>`.
+async function fileDiff(reqPath) {
+  let repoDir = CWD, fileRel = reqPath, prefixArgs = [], rangeArgs = DIFF_ARGS;
+  if (WORKSPACE) {
+    const slash = reqPath.indexOf('/');
+    const repo = reqPath.slice(0, slash);
+    fileRel = reqPath.slice(slash + 1);
+    const r = discoverRepos(WORKSPACE).find((x) => x.repo === repo);
+    if (!r) throw new Error('unknown repo: ' + repo);
+    repoDir = r.dir;
+    prefixArgs = [`--src-prefix=a/${repo}/`, `--dst-prefix=b/${repo}/`];
+    rangeArgs = [`origin/${r.base}...HEAD`];
+  }
+  const { stdout } = await execFileP('git',
+    ['-C', repoDir, 'diff', '-U100000', ...prefixArgs, ...rangeArgs, '--', fileRel],
+    { maxBuffer: 64 * 1024 * 1024 });
+  return stdout;
+}
+
 function buildPrompt(cs) {
   const n = cs.length;
   const where = WORKSPACE
@@ -149,6 +169,11 @@ http.createServer(async (req, res) => {
       else [patch, stats] = await Promise.all([gitDiff(), gitStats()]);
       res.writeHead(200, { 'content-type': 'application/json', ...cors });
       return res.end(JSON.stringify({ patch, stats, workspace: WORKSPACE ? path.basename(WORKSPACE) : null }));
+    }
+    if (u.pathname === '/api/file') {
+      const patch = await fileDiff(u.searchParams.get('path') || '');
+      res.writeHead(200, { 'content-type': 'application/json', ...cors });
+      return res.end(JSON.stringify({ patch }));
     }
     if (u.pathname === '/api/send' && req.method === 'POST') {
       let body = ''; for await (const ch of req) body += ch;
