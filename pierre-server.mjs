@@ -137,6 +137,7 @@ http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   try {
     if (u.pathname === '/' || u.pathname === '/index.html') return serveFile(res, path.join(DIR, 'index.html'));
+    if (u.pathname === '/scrollfix.js') return serveFile(res, path.join(__dirname, 'scrollfix.js'));   // webview scroll-jump shim
     if (u.pathname.startsWith('/dist/')) {
       const fp = path.normalize(path.join(DIR, u.pathname));
       if (!fp.startsWith(path.join(DIR, 'dist'))) { res.writeHead(403); return res.end(); }
