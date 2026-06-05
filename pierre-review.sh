@@ -32,6 +32,9 @@ if [ ! -f "$DIR/pierre/dist/main.js" ]; then
 fi
 
 # Diff server (UI + git diff + send-to-agent), on a free port.
+# Accept both `diffx-review <git args>` and `diffx-review -- <git args>`: strip one
+# leading `--` so we don't double it (which would make git treat the range as a pathspec).
+if [ "${1:-}" = "--" ]; then shift; fi
 node "$DIR/pierre-server.mjs" --cwd "$REPO" --port "$PORT" --surface "${CMUX_SURFACE_ID:-}" -- "$@" & SRV=$!
 for _ in $(seq 1 40); do curl -sf "http://127.0.0.1:$PORT/api/diff" >/dev/null 2>&1 && break; sleep 0.25; done
 
