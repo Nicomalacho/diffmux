@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pierre-review — review a git diff with @pierre/diffs in a cmux browser pane,
-# piping inline comments into the cmux agent pane that launched this. The
-# browser-based counterpart to hunk-review.sh; replaces diffx as the renderer.
+# piping inline comments into the cmux agent pane that launched this.
+# (`diffx-review` is the same command — the historical default name.)
 #
 #   cd <repo>
 #   pierre-review                    # working-tree changes

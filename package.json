@@ -1,14 +1,11 @@
 {
-  "name": "cmux-review",
-  "version": "1.0.0",
-  "description": "Inline diff review in a cmux pane, piped straight into the running agent session — no GitHub round-trip.",
+  "name": "diffmux",
+  "version": "2.0.0",
+  "description": "Local code review for cmux: review a git diff in a @pierre/diffs browser pane and pipe inline comments straight into the running agent session — no GitHub round-trip.",
   "bin": {
     "diffx-review": "./pierre-review.sh",
     "pierre-review": "./pierre-review.sh",
-    "workspace-review": "./workspace-review.sh",
-    "diffx-classic": "./diffx-review.sh",
-    "hunk-review": "./hunk-review.sh",
-    "cmux-review": "./cmux-review"
+    "workspace-review": "./workspace-review.sh"
   },
   "files": [
     "pierre-review.sh",
@@ -17,27 +14,11 @@
     "pierre/package.json",
     "pierre/index.html",
     "pierre/src",
-    "hunk-review.sh",
-    "hunk-bridge.mjs",
-    "diffx-review.sh",
-    "bridge.mjs",
-    "inject.js",
     "scrollfix.js",
-    "cmux-review",
-    "server.mjs",
-    "index.html",
     "README.md"
   ],
   "engines": {
     "node": ">=18"
-  },
-  "peerDependencies": {
-    "diffx-cli": "*"
-  },
-  "peerDependenciesMeta": {
-    "diffx-cli": {
-      "optional": true
-    }
   },
   "license": "MIT"
 }

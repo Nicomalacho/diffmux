@@ -2,7 +2,7 @@
 // pierre-server — serves the @pierre/diffs review UI (pierre/index.html +
 // pierre/dist), computes the git diff, and pastes reviewer comments into a cmux
 // agent pane. We own this UI, so the send-to-agent loop is folded into the
-// server (no separate bridge like diffx needs).
+// server (no separate bridge process).
 //
 //   node pierre-server.mjs --cwd <repo> --port 3500 --surface <ref> [--no-submit] -- <git diff args>
 import http from 'node:http';
